@@ -6,6 +6,7 @@ public class MultiTouchMenu : MonoBehaviour {
 	private Dictionary<GameObject, List<float>> beingTouched = new Dictionary<GameObject, List<float>>(); // maps a GameObject that is being touched to a list of fingerIds associated with it
 	private Dictionary<float, Vector3> offsets = new Dictionary<float, Vector3>(); // maps a fingerId to its offset from the object it is associated with
 	private List<GameObject> alreadyExpanded = new List<GameObject>(); // records each GameObject that has already been expanded to display its submenus
+	private Dictionary<float, TouchPhase> touchPhases = new Dictionary<float, TouchPhase>(); // maps each existing fingerId to its current touch phase -- updated every frame
 
 	private const float originalY = 0f; // all objects should have the same original y-coordinate
 	private const float yScale = 0.0005f; // all objects should have the same y-scale
@@ -34,6 +35,9 @@ public class MultiTouchMenu : MonoBehaviour {
 			if (touch.phase == TouchPhase.Began) {
 				newTouches.Add (touch);
 			}
+			// also update touch phases here 
+			float ID = touch.fingerId; 
+			touchPhases[ID] = touch.phase;
 		}
 		for (int i = 0; i < newTouches.Count; i++) {
 			Touch currentTouch = newTouches[i];
@@ -60,33 +64,45 @@ public class MultiTouchMenu : MonoBehaviour {
 
 	void updateMovement() {
 		foreach (GameObject button in beingTouched.Keys) {
-//			if (beingTouched[button].Count == 1) { // regardless of whether there are 0 or 1 actual touches at the moment 
-//				bool moved = false; // for debugging
-//				foreach (Touch currentTouch in InputProxy.touches) {
-//					if (currentTouch.fingerId == beingTouched[button][0]) {
-//						float distanceFromCamera = camera.transform.position.y - originalY;
-//						Ray touchRay = camera.ScreenPointToRay(currentTouch.position);
-//						Vector3 touchPosition = touchedPosition(touchRay, camera.transform, distanceFromCamera);
-//						button.transform.position = touchPosition + offsets[currentTouch.fingerId]; 
-//						moved = true;
-//					} else {
-//						Debug.Log("different finger");
-//					}
-//				}
-//				if (!moved) {
-//					Debug.Log("issue with updateMovement function");
-//				}
-//			}
-//			if (beingTouched[button].Count == 3) {
-//				int numTouches = calculateTouches (button);
-//				if (numTouches == 1) {
-//					if (!alreadyExpanded.Contains (button)){
-//						generateButtons(button.transform);
-//						alreadyExpanded.Add (button);
-//					
-//					}
-//				}
-//			}
+			int began = 0;
+			int ended = 0;
+			int moved = 0;
+			int stationary = 0;
+			foreach (float fingerID in beingTouched[button]) {
+				if (touchPhases[fingerID] == TouchPhase.Began) {
+					began++;
+				} else if (touchPhases[fingerID] == TouchPhase.Ended) {
+					ended++;
+				} else if (touchPhases[fingerID] == TouchPhase.Moved) {
+					moved++;
+				} else if (touchPhases[fingerID] == TouchPhase.Stationary) {
+					stationary++;
+				}
+			}
+
+			// START GOING THROUGH CASES:
+			if (beingTouched[button].Count == 1 && moved == 1) {
+				foreach (Touch currentTouch in InputProxy.touches) {
+					if (currentTouch.fingerId == beingTouched[button][0]) {
+						float distanceFromCamera = camera.transform.position.y - originalY;
+						Ray touchRay = camera.ScreenPointToRay(currentTouch.position);
+						Vector3 touchPosition = touchedPosition(touchRay, camera.transform, distanceFromCamera);
+						button.transform.position = touchPosition + offsets[currentTouch.fingerId]; 
+					} else {
+						Debug.Log("different finger"); // HAVING ISSUES HERE
+					}
+				}
+			}
+
+			if (beingTouched[button].Count == 3) {
+				int numTouches = calculateTouches (button);
+				if (numTouches == 1 && began == 0) {
+					if (!alreadyExpanded.Contains (button)) {
+						generateButtons(button.transform);
+						alreadyExpanded.Add (button);
+					}
+				}
+			}
 		}
 	}
 
