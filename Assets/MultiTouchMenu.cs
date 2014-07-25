@@ -7,20 +7,68 @@ public class MultiTouchMenu : MonoBehaviour {
 		public float finger2;
 	}
 
+	public struct touchHistory {
+		public int numTouches;
+		public List<float> fingerIds = new List<float>();
+		public int began;
+		public int stationary;
+		public int end; 
+		public int moved;
+	}
+
 	private Dictionary<GameObject, List<float>> beingTouched = new Dictionary<GameObject, List<float>>(); // maps a GameObject that is being touched to a list of fingerIds associated with it
 	private Dictionary<float, Vector3> offsets = new Dictionary<float, Vector3>(); // maps a fingerId to its offset from the object it is associated with
 	private List<GameObject> alreadyExpanded = new List<GameObject>(); // records each GameObject that has already been expanded to display its submenus
 	private Dictionary<float, TouchPhase> touchPhases = new Dictionary<float, TouchPhase>(); // maps each existing fingerId to its current touch phase -- updated every frame
 	private Dictionary<fingerPair, float> fingerDistances = new Dictionary<fingerPair, float>(); // maps a finger pair to the distance between them
+	private Dictionary<GameObject, touchHistory> touchHistories = new Dictionary<GameObject, touchHistory>(); // maps each object to most recent touch "state"
 
 	private const float originalY = 0f; // all objects should have the same original y-coordinate
 	private const float yScale = 0.0005f; // all objects should have the same y-scale
 	private const int numSubmenus = 6;
 
+	private Dictionary<GameObject, GUIText> buttonLabels = new Dictionary<GameObject, GUIText>(); // keeps track of menus and their labels
+
+
+	void Start() {
+		GameObject firstMenu = GameObject.Find("MainCylinder");
+		GameObject empty = new GameObject("empty");
+		empty.AddComponent("GUIText");
+		empty.guiText.text = "Main Menu";
+		Vector3 viewPos = camera.WorldToViewportPoint(firstMenu.transform.position);
+		empty.guiText.anchor = TextAnchor.MiddleCenter;
+		empty.guiText.transform.position = viewPos;
+
+		GameObject secondMenu = GameObject.Find("SecondCylinder");
+		GameObject anotherempty = new GameObject("another");
+		anotherempty.AddComponent("GUIText");
+		anotherempty.guiText.text = "Additional Menu";
+		Vector3 viewportPos = camera.WorldToViewportPoint(secondMenu.transform.position);
+		anotherempty.guiText.anchor = TextAnchor.MiddleCenter;
+		anotherempty.guiText.transform.position = viewportPos;
+
+		buttonLabels.Add (firstMenu, empty.guiText);
+		buttonLabels.Add (secondMenu, anotherempty.guiText);
+	}
+
 	void Update() {
 		updateDictionary();
 		updateMovement();
+		updateLabels();
 	}
+
+	void updateLabels() {
+		List<GameObject> objectList = new List<GameObject>();
+		foreach (GameObject key in buttonLabels.Keys) {
+			objectList.Add (key);
+		}
+		for (int i = 0; i < objectList.Count; i++) {
+			GUIText text = buttonLabels[objectList[i]];
+			Vector3 viewPos = camera.WorldToViewportPoint(objectList[i].transform.position);
+			text.transform.position = viewPos;
+		}
+	}
+
 
 	void updateDictionary() {
 		// Remove old touches 
@@ -86,6 +134,46 @@ public class MultiTouchMenu : MonoBehaviour {
 				}
 			}
 			int numTouches = calculateTouches (button);
+
+			if (began > 0 || ended > 0 || moved > 0) {
+				touchHistory previousTouches = new touchHistory(); 
+				previousTouches.numTouches = numTouches;
+				previousTouches.fingerIds = beingTouched[button];
+				previousTouches.began = began;
+				previousTouches.moved = moved;
+				previousTouches.ended = ended;
+				previousTouches.stationary = stationary;
+			}
+
+			if (beingTouched[button].Count == 1 && moved == 1) { // drags
+				foreach (Touch currentTouch in InputProxy.touches) {
+					if (currentTouch.fingerId == beingTouched[button][0]) {
+						float distanceFromCamera = camera.transform.position.y - originalY;
+						Ray touchRay = camera.ScreenPointToRay(currentTouch.position);
+						Vector3 touchPosition = touchedPosition(touchRay, camera.transform, distanceFromCamera);
+						button.transform.position = touchPosition + offsets[currentTouch.fingerId]; 
+					}
+				}
+			} else if  (beingTouched[button].Count == 3) {
+				if (numTouches == 1 && began == 0) { // EXPAND
+					if (!alreadyExpanded.Contains (button)) {
+						generateButtons(button.transform);
+						alreadyExpanded.Add (button);
+					}
+				}
+				if (began == 1 && numTouches != 3) {
+					beingTouched[button].Clear ();
+				}
+			}
+			if (beingTouched[button].Count > 1 && numTouches == 0) { // whenever all associated fingers are off of the button
+				if (beingTouched[button].Count == 3) {
+					// fingerID = finger
+					// coroutine to expand in lines
+				}
+				beingTouched[button].Clear ();
+				
+			} 
+		}
 			// START GOING THROUGH CASES:
 
 			// WHENEVER NUMTOUCHES = 2, RECALCULATE THE DISTANCE BETWEEN THOSE TWO AND STORE WITH GAMEOBJECT
@@ -125,43 +213,13 @@ public class MultiTouchMenu : MonoBehaviour {
 //				}
 //
 //			} 
-			if (beingTouched[button].Count == 1 && moved == 1) {
-				foreach (Touch currentTouch in InputProxy.touches) {
-					if (currentTouch.fingerId == beingTouched[button][0]) {
-						float distanceFromCamera = camera.transform.position.y - originalY;
-						Ray touchRay = camera.ScreenPointToRay(currentTouch.position);
-						Vector3 touchPosition = touchedPosition(touchRay, camera.transform, distanceFromCamera);
-						button.transform.position = touchPosition + offsets[currentTouch.fingerId]; 
-					}
-				}
-			} else if  (beingTouched[button].Count == 3) {
-				if (numTouches == 1 && began == 0) { // EXPAND
-					if (!alreadyExpanded.Contains (button)) {
-						generateButtons(button.transform);
-						alreadyExpanded.Add (button);
-					}
-				}
-				if (began == 1 && numTouches != 3) {
-					beingTouched[button].Clear ();
-					Debug.Log("happening");
-				}
-			}
-			if (beingTouched[button].Count > 1 && numTouches == 0) {
-				beingTouched[button].Clear ();
-			} 
-		}
 	}
 
 	void generateButtons(Transform hitObjectTransform) {
 		float cylinderScale = hitObjectTransform.localScale.x;
 		float newDiameter = 1.3f * cylinderScale;
-
-		// update GUI labels positions
-
-		// get angle and constant for number of submenus
 		float theta = (2 * Mathf.PI) / numSubmenus;
 
-		// general case 
 		for (int i = 1; i <= numSubmenus; i++) {
 			GameObject newButton = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
 			newButton.name = "Submenu " + i;
@@ -169,29 +227,16 @@ public class MultiTouchMenu : MonoBehaviour {
 			newButton.transform.position = hitObjectTransform.position + new Vector3(newDiameter * Mathf.Cos(theta * i), 0 , newDiameter * Mathf.Sin(theta * i));
 			newButton.renderer.material.color = Color.black;
 			newButton.layer = 8;
-
+		
 			GameObject buttonLabel = new GameObject ("label");
 			buttonLabel.AddComponent("GUIText");
 			buttonLabel.guiText.text = "Submenu";
 			Vector3 viewPos = camera.WorldToViewportPoint(newButton.transform.position);
+			buttonLabel.guiText.anchor = TextAnchor.MiddleCenter;
 			buttonLabel.guiText.transform.position = viewPos;
-		}
 
-//		// in the x direction
-//		GameObject newButton = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-//		newButton.name = "Submenu";
-//
-//		newButton.transform.position = hitObjectTransform.position + new Vector3(radius * 2, 0, 0);
-//		newButton.renderer.material.color = Color.black;
-//		newButton.layer = 8;
-//
-//		// in the z direction 
-//		GameObject secondButton = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-//		secondButton.name = "Submenu";
-//		secondButton.transform.localScale = new Vector3(cylinderScale / 2.5f, originalY, cylinderScale / 2.5f);
-//		secondButton.transform.position = hitObjectTransform.position + new Vector3(0, 0, radius * 2);
-//		secondButton.renderer.material.color = Color.black;
-//		secondButton.layer = 8;
+			buttonLabels.Add (newButton, buttonLabel.guiText);
+		}
 	}
 
 	int calculateTouches(GameObject button) {
