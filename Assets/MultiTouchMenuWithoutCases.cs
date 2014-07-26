@@ -7,27 +7,21 @@ public class MultiTouchMenu : MonoBehaviour {
 		public float finger2;
 	}
 
-//	public struct touchHistory {
-//		public int numTouches;
-//		public List<float> fingerIds;
-//		public int began;
-//		public int stationary;
-//		public int ended; 
-//		public int moved;
-//	}
-
-	enum Touchstate {
-		blank,
-		drag
+	public struct touchHistory {
+		public int numTouches;
+		public List<float> fingerIds;
+		public int began;
+		public int stationary;
+		public int ended; 
+		public int moved;
 	}
-
 
 	private Dictionary<GameObject, List<float>> beingTouched = new Dictionary<GameObject, List<float>>(); // maps a GameObject that is being touched to a list of fingerIds associated with it
 	private Dictionary<float, Vector3> offsets = new Dictionary<float, Vector3>(); // maps a fingerId to its offset from the object it is associated with
 	private List<GameObject> alreadyExpanded = new List<GameObject>(); // records each GameObject that has already been expanded to display its submenus
 	private Dictionary<float, TouchPhase> touchPhases = new Dictionary<float, TouchPhase>(); // maps each existing fingerId to its current touch phase -- updated every frame
 	private Dictionary<fingerPair, float> fingerDistances = new Dictionary<fingerPair, float>(); // maps a finger pair to the distance between them
-	private Dictionary<GameObject, Queue<Touchstate>> touchHistories = new Dictionary<GameObject, Queue<TouchState>>(); // maps each activated object to its touch history
+	private Dictionary<GameObject, touchHistory> touchHistories = new Dictionary<GameObject, touchHistory>(); // maps each object to most recent touch "state"
 
 	private const float originalY = 0f; // all objects should have the same original y-coordinate
 	private const float yScale = 0.0005f; // all objects should have the same y-scale
@@ -140,66 +134,57 @@ public class MultiTouchMenu : MonoBehaviour {
 			}
 			int numTouches = calculateTouches (button);
 
-			Queue<Touchstate> touchQueue = new Queue<Touchstate>();
-			if (touchHistories.ContainsKey (button)) {
-				touchQueue = touchHistories[button];
-			}
-			// check cases 
-			Touchstate state = Touchstate.blank;
-
 
 			// UPDATE TOUCH HISTORY
-//			if (began > 0 || ended > 0 || moved > 0) {
-//				touchHistory previousTouches = new touchHistory(); 
-//				previousTouches.numTouches = numTouches;
-//				previousTouches.fingerIds = beingTouched[button];
-//				previousTouches.began = began;
-//				previousTouches.moved = moved;
-//				previousTouches.ended = ended;
-//				previousTouches.stationary = stationary;
-//				if (touchHistories.ContainsKey(button)) {
-//					touchHistories[button] = previousTouches; 
-//				} else {
-//					touchHistories.Add (button, previousTouches);
-//				}
-//			}
+			if (began > 0 || ended > 0 || moved > 0) {
+				touchHistory previousTouches = new touchHistory(); 
+				previousTouches.numTouches = numTouches;
+				previousTouches.fingerIds = beingTouched[button];
+				previousTouches.began = began;
+				previousTouches.moved = moved;
+				previousTouches.ended = ended;
+				previousTouches.stationary = stationary;
+				if (touchHistories.ContainsKey(button)) {
+					touchHistories[button] = previousTouches; 
+				} else {
+					touchHistories.Add (button, previousTouches);
+				}
+			}
 			if (beingTouched[button].Count == 1 && moved == 1) { // drags
-//				foreach (Touch currentTouch in InputProxy.touches) {
-//					if (currentTouch.fingerId == beingTouched[button][0]) {
-//						float distanceFromCamera = camera.transform.position.y - originalY;
-//						Ray touchRay = camera.ScreenPointToRay(currentTouch.position);
-//						Vector3 touchPosition = touchedPosition(touchRay, camera.transform, distanceFromCamera);
-//						button.transform.position = touchPosition + offsets[currentTouch.fingerId]; 
-//					}
-//				}
-				state = Touchstate.drag;
-			} 
-//			else if (beingTouched[button].Count == 1 && ended == 1) {
-//				touchHistory history = touchHistories[button];
-//				if (history.fingerIds.Count == 3 && history.numTouches == 1 && history.began == 0) {
-//					Debug.Log("gets here");
+				foreach (Touch currentTouch in InputProxy.touches) {
+					if (currentTouch.fingerId == beingTouched[button][0]) {
+						float distanceFromCamera = camera.transform.position.y - originalY;
+						Ray touchRay = camera.ScreenPointToRay(currentTouch.position);
+						Vector3 touchPosition = touchedPosition(touchRay, camera.transform, distanceFromCamera);
+						button.transform.position = touchPosition + offsets[currentTouch.fingerId]; 
+					}
+				}
+			} else if (beingTouched[button].Count == 1 && ended == 1) {
+				touchHistory history = touchHistories[button];
+				if (history.fingerIds.Count == 3 && history.numTouches == 1 && history.began == 0) {
+					Debug.Log("gets here");
+					if (!alreadyExpanded.Contains (button)) {
+						generateButtons(button.transform);
+						alreadyExpanded.Add (button);
+					}
+				}
+			} else if  (beingTouched[button].Count == 3) {
+//				if (numTouches == 1 && began == 0) { // EXPAND
 //					if (!alreadyExpanded.Contains (button)) {
 //						generateButtons(button.transform);
 //						alreadyExpanded.Add (button);
 //					}
 //				}
-//			} else if  (beingTouched[button].Count == 3) {
-////				if (numTouches == 1 && began == 0) { // EXPAND
-////					if (!alreadyExpanded.Contains (button)) {
-////						generateButtons(button.transform);
-////						alreadyExpanded.Add (button);
-////					}
-////				}
-//				if (began == 1 && numTouches != 3) {
-//					beingTouched[button].Clear ();
-//				}
-//				if (numTouches == 0 && ended > 0) { // try getting rid of ended or ended = 3 or use EITHER touch history or ended 
-//
-//				}
-//			}
-//			if (beingTouched[button].Count > 1 && numTouches == 0) { // whenever all associated fingers are off of the button
-//				beingTouched[button].Clear ();
-//			} 
+				if (began == 1 && numTouches != 3) {
+					beingTouched[button].Clear ();
+				}
+				if (numTouches == 0 && ended > 0) { // try getting rid of ended or ended = 3 or use EITHER touch history or ended 
+
+				}
+			}
+			if (beingTouched[button].Count > 1 && numTouches == 0) { // whenever all associated fingers are off of the button
+				beingTouched[button].Clear ();
+			} 
 		}
 
 //		foreach (GameObject key in touchHistories.Keys) {
@@ -343,6 +328,8 @@ public class MultiTouchMenu : MonoBehaviour {
 //			}
 //		}
 //	}
+
+
 		 
 	Vector3 touchedPosition(Ray touchRay, Transform cameraTransform, float distFromOrigin) { // copied from Thai
 		float angle;

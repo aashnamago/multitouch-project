@@ -244,12 +244,12 @@ GameObject:
   - 136: {fileID: 367013617}
   - 23: {fileID: 367013616}
   m_Layer: 8
-  m_Name: Cylinder
+  m_Name: SecondCylinder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!23 &367013616
 Renderer:
   m_ObjectHideFlags: 0
